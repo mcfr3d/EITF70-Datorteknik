@@ -1,0 +1,245 @@
+
+#include "displays.h"
+#include "address_mapping.h"
+#include "buttons.h"
+#include "interrupt_controller.h"
+#include "timers.h"
+#include "microBlaze.h"
+#include "alarm_clock.h"
+
+/*
+ *  Keeps the current state of the push buttons. Modified only in the interrupt handler for TIMER1 timer1AlarmClockInterruptHandler()
+ */
+unsigned int currentButtonsState = 0;
+
+/*
+ *  Keeps the previous state of the push buttons
+ */
+unsigned int prevButtonsState = 0;
+
+/*
+ *  Keeps the binary pattern for the bottom-most horizontal segment
+ */
+unsigned int blinker = 0b0001000;
+
+/*
+ *  Changes from 0x00000000 to 0xFFFFFFFF and vice-versa. Modified only in the interrupt handler for TIMER1 timer1AlarmClockInterruptHandler()
+ *  Used to indicate if the blinker should be on or off
+ */
+unsigned int blinkerOnOff = 0;
+
+/*
+ *  Keeps track of the current state of the alarm-clock.
+ *  value 0 == RUN state
+ *  value 1 == SET_TIME state
+ *  value 2 == SET_ALARM state
+ *  value 3 == ALARM state
+ */
+unsigned int alarmclock_state = 0;
+
+/*
+ *  Keeps track of the index of the seven-segment display whose value might be modified by pressing the up or the down button
+ */
+unsigned char index_pos = 0;
+
+/*
+ *  Keeps the time set by the user.
+ *  Element at index 0 refers to hours and should only accept values in the range 0-23
+ *  Element at index 1 refers to minutes and should only accept values in the range 0-59
+ *  Element at index 2 refers to seconds and should only accept values in the range 0-59
+ *  Element at index 3 refers to hundreds of a second and should only accept values in the range 0-99
+ */
+unsigned char newTime[4];
+
+/*
+ *  Keeps the running time.
+ *  Modified in the interrupt handler for TIMER1 timer1AlarmClockInterruptHandler() or when the state changes from SET_TIME to RUN
+ *  Element at index 0 refers to hours and should only accept values in the range 0-23
+ *  Element at index 1 refers to minutes and should only accept values in the range 0-59
+ *  Element at index 2 refers to seconds and should only accept values in the range 0-59
+ *  Element at index 3 refers to hundreds of a second and should only accept values in the range 0-99
+ */
+unsigned char currentTime[4];
+
+/*
+ *  Keeps the time that indicates when the alarm goes off.
+ *  Element at index 0 refers to hours and should only accept values in the range 0-23
+ *  Element at index 1 refers to minutes and should only accept values in the range 0-59
+ *  Element at index 2 refers to seconds and should only accept values in the range 0-59
+ *  Element at index 3 refers to hundreds of a second and should only accept values in the range 0-99
+ */
+unsigned char alarmTime[4];
+
+/*
+ *  Implement the code based on the description written as a comment
+ */
+
+int main() {
+	resetDisplays();
+	initTimers_alarmClock();
+	initController_alarmClock();
+	enableTimer1();
+	enableMicroBlazeInterrupts();
+	while (1 == 1) {
+		switch (alarmclock_state) {
+		case 0:
+			/*
+			 * Turn off the 16 LEDs.
+			 * Displays the current time on the eight seven-segment displays
+			 * Changes the state of the alarm-clock to ALARM and enables TIMER2 only if the current time is the same as the alarm time and the leftmost switch is turned on
+			 * Checks if the UP or DOWN button are pressed now but has not been pressed before
+			 * If the UP button is pressed now, but has not been pressed before
+			 * 			-the state of the alarm-clock changes to SET_TIME
+			 * 			-the newTime is set to the same value as the currentTime
+			 * 			-the newTime is displayed on the eight seven-segment displays
+			 * 			-the index_pos is initialized to zero
+			 * If the DOWN button is pressed now, but has not been pressed before
+			 * 			-the state of the alarm-clock changes to SET_ALARM
+			 * 			-the alarmTime is displayed on the eight seven-segment displays
+			 * 			-the index_pos is initialized to zero
+			 * 			-the 16 LEDs are turned on
+			 */
+			*LED_DATA =0;
+			display(currentTime); //implement
+
+			break;
+		case 1:
+			/*
+			 * Only when the state of the buttons has changed, the newTime is displayed
+			 * If the UP or DOWN buttons are pressed now, but have not been pressed before
+			 * 		-based on the index_pos, the corresponding element in the newTime array is incremented or decremented
+			 * If the LEFT or RIGHT buttons are pressed now, but have not been pressed before
+			 * 		-the index_pos is incremented/decremented by 2
+			 * If the MIDDLE button is pressed now, but has not been pressed before,
+			 * 		-the currentTime is set to be the same as the newTime
+			 * 		-the state of the alarm-clock changes to RUN
+			 * Based on the blinkerOnOff variable, the bottom-most horizontal segments of the displays with indices "index_pos" and "index_pos+1" are turned-on or turned-off
+			 * NOTE: The data registers of the SEVEN_SEGMENT_DISPLAY device are read-write registers, i.e. when reading the data register controlling a particular seven-segment display, one obtains the same information that is used to drive (control) the seven-segment display
+			 */
+
+			break;
+		case 2:
+			/*
+			 * Only when the state of the buttons has changed, the alarmTime is displayed
+			 * If the UP or DOWN buttons are pressed now, but have not been pressed before
+			 * 		-based on the index_pos, the corresponding element in the alarmTime is incremented or decremented
+			 * If the LEFT or RIGHT buttons are pressed now, but have not been pressed before
+			 * 		-the index_pos is incremented/decremented by 2
+			 * If the MIDDLE button is pressed now, but has not been pressed before,
+			 * 		-the 16 LEDs are turned off
+			 * 		- the state of the alarm-clock changes to RUN
+			 * Based on the blinkerOnOff variable, the bottom-most horizontal segments of the displays with indices "index_pos" and "index_pos+1" are turned-on or turned-off
+			 * NOTE: The data registers of the SEVEN_SEGMENT_DISPLAY device are read-write registers, i.e. when reading the data register controlling a particular seven-segment display, one obtains the same information that is used to drive (control) the seven-segment display
+			 */
+
+			break;
+		case 3:
+			/*
+			 * Based on the state of blinkerOnOff, the 16 LEDs are turned on or off
+			 * Checks if the state of the buttons has changed
+			 * If the MIDDLE button is pressed, but has not been pressed before
+			 * 		-the alarmTime is incremented by 5s
+			 * 		-TIMER2 is stopped an the interrupts in the device are acknowledged
+			 * 		-the alarm-clock state is changed to RUN
+			 */
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+void initTimers_alarmClock() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	*TIMER1_LOAD = 999999;
+	*TIMER1_CTRL = (1 << 8) | (1 << 6) | (1 << 5) | (1 << 4) | (1 << 1);
+	*TIMER2_LOAD = 0xFFFFFFFF - 500000000;
+	*TIMER2_CTRL = (1 << 8) | (1 << 6) | (1 << 5) & (~(1 << 4));
+
+}
+
+void enableTimer1() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	*TIMER1_CTRL = (*TIMER1_CTRL | (1 << 7)) & (~(1 << 5));
+}
+
+void enableTimer2() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	*TIMER2_CTRL = *TIMER2_CTRL | (1 << 5);
+	*TIMER2_CTRL = (*TIMER2_CTRL | (1 << 7)) & (~(1 << 5));
+}
+
+void display(unsigned char *time_array) {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	for (unsigned char i = 0; i < 4; i++)
+	displayNumberAtIndex(time_array[i],6-(2 * i));
+}
+
+
+
+
+
+unsigned int compareTimeArray(unsigned char * time_array1,
+		unsigned char *time_array2) {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	int i;
+	for (i = 0; i <= 3; i++) {
+		if (time_array1[i] != time_array2[i])
+			return 0;
+	}
+	return 1;
+
+}
+
+void setTime(unsigned char *newTime_array, unsigned char *oldTime_array) {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	int i;
+	for (i = 0; i <= 3; i++) {
+		newTime_array[i] = oldTime_array[i];
+
+	}
+
+}
+
+void initController_alarmClock() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+
+	*IER |= 0b110;
+	*IVAR1 = (unsigned int) timer1AlarmClockInterruptHandler;
+	*IVAR2 = (unsigned int) timer2AlarmClockInterruptHandler;
+	*MER |= 0b11;
+
+
+}
+
+void timer1AlarmClockInterruptHandler() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+
+
+	*TIMER1_CTRL |= (1 << 8);
+	*IAR = 0b10;
+}
+
+void timer2AlarmClockInterruptHandler() {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */	
+	*TIMER1_CTRL |= (1 << 8);
+	*IAR = 0b10;
+}

@@ -1,0 +1,40 @@
+/*
+ * testing.c
+ *
+ *  Created on: 1 mars 2017
+ *      Author: htx10fny
+ */
+#include "displays.h"
+#include "address_mapping.h"
+#include "buttons.h"
+#include "interrupt_controller.h"
+#include "timers.h"
+#include "microBlaze.h"
+#include "alarm_clock.h"
+
+
+
+int main() {
+	*SWITCHES_CONTROL = 0xFFFF;
+	*LED_CONTROL = 0;
+	while (1 == 1){
+		unsigned char hej[4] = {11,11,11,11};
+		display(hej);
+	}
+}
+
+void display(unsigned char *time_array) {
+	/*
+	 * Implement the code based on the description provided in the header file alarm_clock.h
+	 */
+	unsigned char displayIndex = 0;
+	unsigned char *value;
+	int i;
+	for(unsigned char i= 3; i>=0; i--) {
+		for (unsigned char j = 0; j < 2; j++){
+				displayDigitAtIndex(displayIndex + j, value[j]);
+			}
+			displayIndex++;
+				value = time_array[i];
+	}
+}
